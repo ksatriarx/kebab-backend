@@ -7,7 +7,7 @@ export default async function handler(req, res) {
     }
 
     const data = req.body;
-    const serverKey = process.env.MIDTRANS_SERVER_KEY;
+    const serverKey = process.env.MIDTRANS_SERVER_KEY ? process.env.MIDTRANS_SERVER_KEY.trim() : '';
     
     // Data Firebase Anda (sama seperti di index.html)
     const projectId = 'kebab-idi';
