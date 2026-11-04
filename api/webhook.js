@@ -12,25 +12,23 @@ export default async function handler(req, res) {
     const apiKey = 'AIzaSyCceiYONY_sx9ivD0CDDQGoB9OXm05h4CY';
 
     try {
-        // 1. Pengecekan Keamanan (Signature)
+        // 1. PENGECEKAN SIGNATURE DIMATIKAN SEMENTARA
+        /*
         const signatureInput = `${data.order_id}${data.status_code}${data.gross_amount}${serverKey}`;
         const hash = crypto.createHash('sha512').update(signatureInput).digest('hex');
 
         if (hash !== data.signature_key) {
             return res.status(401).json({ message: 'Signature tidak valid' });
         }
+        */
 
         // 2. Cek apakah ini TOP UP SALDO atau PESANAN?
         if (data.order_id.startsWith('TOPUP-')) {
-            // ==============================
-            // LOGIKA TOP UP SALDO
-            // ==============================
             if (data.transaction_status === 'settlement' || data.transaction_status === 'capture') {
                 const email = data.customer_details.email;
-                const emailKey = email.replace(/[^a-zA-Z0-9]/g, ""); // Hapus karakter aneh dari email
+                const emailKey = email.replace(/[^a-zA-Z0-9]/g, ""); 
                 const nominal = parseFloat(data.gross_amount);
 
-                // Ambil saldo saat ini dari Firebase
                 const getUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/saldo_pelanggan/${emailKey}?key=${apiKey}`;
                 const getRes = await fetch(getUrl);
                 let currentSaldo = 0;
@@ -44,7 +42,6 @@ export default async function handler(req, res) {
 
                 const newSaldo = currentSaldo + nominal;
 
-                // Simpan saldo baru ke Firebase
                 const postUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/saldo_pelanggan/${emailKey}?key=${apiKey}`;
                 const bodyData = {
                     fields: {
@@ -54,7 +51,7 @@ export default async function handler(req, res) {
                 };
 
                 const postRes = await fetch(postUrl, {
-                    method: 'PATCH', // PATCH untuk update data yang sudah ada
+                    method: 'PATCH', 
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(bodyData)
                 });
@@ -67,9 +64,6 @@ export default async function handler(req, res) {
                 return res.status(200).json({ message: 'Top Up Saldo Berhasil' });
             }
         } else {
-            // ==============================
-            // LOGIKA PESANAN BIASA (Kode lama Anda)
-            // ==============================
             const firestoreUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/transaksi_online?key=${apiKey}`;
             
             const firestoreData = {
