@@ -13,26 +13,18 @@ export default async function handler(req, res) {
     const apiKey = 'AIzaSyCceiYONY_sx9ivD0CDDQGoB9OXm05h4CY';
 
     try {
-        // 1. Hitung Signature (Untuk Debugging)
+        // 1. AKTIFKAN KEMBALI PENGECEKAN KEAMANAN
         const signatureInput = `${data.order_id}${data.status_code}${data.gross_amount}${serverKey}`;
         const hash = crypto.createHash('sha512').update(signatureInput).digest('hex');
-        
-        console.log("--- WEBHOOK DEBUG ---");
-        console.log("Expected Hash:", hash);
-        console.log("Received Hash:", data.signature_key);
 
-        // 2. PENGECEKAN SIGNATURE DIMATIKAN SEMENTARA (BYPASS)
-        // Jika hash !== data.signature_key, kita biarkan lolos dulu.
-        /*
-        if (hash !== data.signature_key) { 
+        if (hash !== data.signature_key) {
             return res.status(401).json({ message: 'Signature tidak valid' });
         }
-        */
 
-        // 3. Siapkan URL Firestore
+        // 2. Siapkan URL Firestore
         const firestoreUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/transaksi_online?key=${apiKey}`;
         
-        // 4. Format Data Firestore
+        // 3. Format Data Firestore
         const firestoreData = {
             fields: {
                 order_id: { stringValue: data.order_id },
@@ -43,7 +35,7 @@ export default async function handler(req, res) {
             }
         };
 
-        // 5. Kirim ke Firebase
+        // 4. Kirim ke Firebase
         const response = await fetch(firestoreUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -52,9 +44,7 @@ export default async function handler(req, res) {
 
         const result = await response.json();
 
-        // 6. Jika Firebase menolak, kirim pesan error aslinya
         if (!response.ok) {
-            console.log("Firebase Error:", JSON.stringify(result));
             return res.status(500).json({ message: 'Gagal simpan ke Firebase', error: result.error });
         }
 
