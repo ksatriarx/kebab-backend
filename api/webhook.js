@@ -6,22 +6,27 @@ export default async function handler(req, res) {
     }
 
     const data = req.body;
-    const serverKey = process.env.MIDTRANS_SERVER_KEY ? process.env.MIDTRANS_SERVER_KEY.trim() : '';
+    
+    // 1. MEMBERSIHKAN SERVER KEY DARI SEMUA SPASI/ENTER (ANTI-GAGAL)
+    const serverKeyRaw = process.env.MIDTRANS_SERVER_KEY || '';
+    const serverKey = serverKeyRaw.replace(/\s/g, ''); // Hapus semua spasi, tab, dan enter
     
     const projectId = 'kebab-idi';
     const apiKey = 'AIzaSyCceiYONY_sx9ivD0CDDQGoB9OXm05h4CY';
 
     try {
-        // 1. KUNCI KEAMANAN (Dengan perbaikan format angka desimal)
-        const grossAmountStr = parseFloat(data.gross_amount).toFixed(2); // Memastikan jadi "25000.00"
+        // 2. KUNCI KEAMANAN
+        // Pastikan format gross_amount desimal (contoh: 10000.00)
+        const grossAmountStr = parseFloat(data.gross_amount).toFixed(2);
         const signatureInput = `${data.order_id}${data.status_code}${grossAmountStr}${serverKey}`;
         const hash = crypto.createHash('sha512').update(signatureInput).digest('hex');
 
+        // Jika kunci tidak cocok, tolak!
         if (hash !== data.signature_key) {
             return res.status(401).json({ message: 'Signature tidak valid' });
         }
 
-        // 2. Cek apakah ini TOP UP SALDO atau PESANAN?
+        // 3. Cek apakah ini TOP UP SALDO atau PESANAN?
         if (data.order_id.startsWith('TOPUP-')) {
             if (data.transaction_status === 'settlement' || data.transaction_status === 'capture') {
                 const email = data.customer_details.email;
