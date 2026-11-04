@@ -1,34 +1,38 @@
 import crypto from 'crypto';
 
 export default async function handler(req, res) {
+    // Hanya izinkan metode POST
     if (req.method !== 'POST') {
         return res.status(405).json({ message: 'Method Not Allowed' });
     }
 
     const data = req.body;
+    // Pastikan tidak ada spasi di Server Key
     const serverKey = process.env.MIDTRANS_SERVER_KEY ? process.env.MIDTRANS_SERVER_KEY.trim() : '';
     
+    // Data Firebase
     const projectId = 'kebab-idi';
     const apiKey = 'AIzaSyCceiYONY_sx9ivD0CDDQGoB9OXm05h4CY';
 
     try {
-        // 1. PENGECEKAN SIGNATURE DIMATIKAN SEMENTARA
-        /*
+        // 1. KUNCI KEAMANAN (SIGNATURE VALIDATION)
         const signatureInput = `${data.order_id}${data.status_code}${data.gross_amount}${serverKey}`;
         const hash = crypto.createHash('sha512').update(signatureInput).digest('hex');
 
+        // Jika kunci tidak cocok, tolak!
         if (hash !== data.signature_key) {
             return res.status(401).json({ message: 'Signature tidak valid' });
         }
-        */
 
         // 2. Cek apakah ini TOP UP SALDO atau PESANAN?
         if (data.order_id.startsWith('TOPUP-')) {
+            // --- LOGIKA TOP UP SALDO ---
             if (data.transaction_status === 'settlement' || data.transaction_status === 'capture') {
                 const email = data.customer_details.email;
                 const emailKey = email.replace(/[^a-zA-Z0-9]/g, ""); 
                 const nominal = parseFloat(data.gross_amount);
 
+                // Ambil saldo saat ini dari Firebase
                 const getUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/saldo_pelanggan/${emailKey}?key=${apiKey}`;
                 const getRes = await fetch(getUrl);
                 let currentSaldo = 0;
@@ -42,6 +46,7 @@ export default async function handler(req, res) {
 
                 const newSaldo = currentSaldo + nominal;
 
+                // Simpan saldo baru ke Firebase
                 const postUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/saldo_pelanggan/${emailKey}?key=${apiKey}`;
                 const bodyData = {
                     fields: {
@@ -64,6 +69,7 @@ export default async function handler(req, res) {
                 return res.status(200).json({ message: 'Top Up Saldo Berhasil' });
             }
         } else {
+            // --- LOGIKA PESANAN BIASA ---
             const firestoreUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/transaksi_online?key=${apiKey}`;
             
             const firestoreData = {
@@ -88,6 +94,7 @@ export default async function handler(req, res) {
             }
         }
 
+        // Jika semua berjalan lancar
         res.status(200).json({ message: 'Webhook Berhasil Diterima' });
 
     } catch (error) {
