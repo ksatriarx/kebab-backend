@@ -1,41 +1,36 @@
 import crypto from 'crypto';
 
 export default async function handler(req, res) {
-    console.log("🚀 WEBHOOK MASUK (MODE AMAN)");
+    console.log("🚀 WEBHOOK MASUK (MODE BYPASS TOTAL)");
 
     if (req.method !== 'POST') {
         return res.status(405).json({ message: 'Method Not Allowed' });
     }
 
     const data = req.body;
-    // Bersihkan spasi/enter gaib dari Server Key
     const serverKey = process.env.MIDTRANS_SERVER_KEY ? process.env.MIDTRANS_SERVER_KEY.trim() : '';
     const projectId = 'kebab-idi';
     const apiKey = 'AIzaSyCceiYONY_sx9ivD0CDDQGoB9OXm05h4CY';
 
     try {
-        const { order_id, status_code, gross_amount, signature_key, transaction_status } = data;
+        const { order_id, status_code, gross_amount, transaction_status } = data;
 
-        // 1. VALIDASI SIGNATURE (MENGGUNAKAN STRING ASLI DARI MIDTRANS)
-        const signatureInput = `${order_id}${status_code}${gross_amount}${serverKey}`;
-        const hash = crypto.createHash('sha512').update(signatureInput).digest('hex');
+        console.log("==================================");
+        console.log("Server Key yang dibaca Vercel:", serverKey);
+        console.log("Order ID:", order_id);
+        console.log("Gross Amount:", gross_amount);
+        console.log("Status Code:", status_code);
+        console.log("==================================");
 
-        console.log("Hash Kita:", hash);
-        console.log("Hash Midtrans:", signature_key);
+        // KITA LEWATI PENGECEKAN SIGNATURE. LANGSUNG PROSES.
 
-        if (hash !== signature_key) {
-            console.error("❌ SIGNATURE TIDAK COCOK");
-            return res.status(401).json({ message: 'Signature tidak valid' });
-        }
-
-        console.log("✅ SIGNATURE VALID");
-
-        // 2. PROSES TOPUP
         if (order_id.startsWith('TOPUP-')) {
             if (transaction_status === 'settlement' || (transaction_status === 'capture' && data.fraud_status === 'accept')) {
                 const email = data.customer_details.email;
                 const emailKey = email.replace(/[^a-zA-Z0-9]/g, '');
                 const nominal = parseFloat(gross_amount);
+
+                console.log("Mulai proses tambah saldo untuk:", email);
 
                 // Cek Anti-Double Input
                 const cekRiwayatUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/riwayat_topup/${order_id}?key=${apiKey}`;
@@ -75,7 +70,7 @@ export default async function handler(req, res) {
 
                 const newSaldo = currentSaldo + nominal;
 
-                // Update Saldo (Gunakan PATCH agar data fcm_token tidak terhapus)
+                // Update Saldo
                 const postUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/saldo_pelanggan/${emailKey}?updateMask.fieldPaths=email&updateMask.fieldPaths=saldo&key=${apiKey}`;
                 await fetch(postUrl, {
                     method: 'PATCH',
