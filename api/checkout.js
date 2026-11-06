@@ -33,7 +33,7 @@ export default async function handler(req, res) {
             ? 'https://app.midtrans.com/snap/v1/transactions' 
             : 'https://app.sandbox.midtrans.com/snap/v1/transactions';
 
-        console.log(`Mengirim request ke Midtrans ${isProduction ? 'PRODUCTION' : 'SANDBOX'}...`);
+        console.log(`Mengirim request ke Midtrans ${isProduction ? 'PRODUCTION' : 'SANDBOX'}... URL: ${midtransUrl}`);
 
         const response = await fetch(midtransUrl, {
             method: 'POST',
@@ -60,12 +60,22 @@ export default async function handler(req, res) {
             res.status(200).json({ token: data.token });
         } else {
             // Tampilkan pesan error dari Midtrans di log Vercel untuk mempermudah debug
-            console.error("Midtrans Error:", data);
+            console.error("Midtrans Error Response:", data);
             res.status(500).json({ message: 'Gagal dapat token', error: data });
         }
 
     } catch (error) {
-        console.error("Server Error:", error.message);
-        res.status(500).json({ message: 'Terjadi kesalahan server', error: error.message });
+        // LOG DETAIL UNTUK DEBUGGING
+        console.error("=== FETCH GAGAL TOTAL ===");
+        console.error("Pesan Error:", error.message);
+        // Ini akan memberitahu kita apakah masalahnya timeout, koneksi ditolak, dll.
+        console.error("Penyebab (Cause):", error.cause); 
+        console.error("========================");
+        
+        res.status(500).json({ 
+            message: 'Terjadi kesalahan server saat menghubungi Midtrans', 
+            detail: error.message,
+            cause: error.cause ? String(error.cause) : 'Tidak ada detail cause'
+        });
     }
 }
