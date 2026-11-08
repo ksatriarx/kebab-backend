@@ -1,3 +1,5 @@
+import crypto from 'node:crypto';
+
 export default async function handler(req, res) {
     // 1. Hanya izinkan metode POST
     if (req.method !== 'POST') {
@@ -9,7 +11,29 @@ export default async function handler(req, res) {
     const apiKey = 'AIzaSyCceiYONY_sx9ivD0CDDQGoB9OXm05h4CY';
 
     try {
-        const { order_id, transaction_status, fraud_status } = data;
+        const { order_id, transaction_status, fraud_status, status_code, gross_amount, signature_key } = data;
+
+        // ==========================================
+        // VERIFIKASI SIGNATURE (WAJIB untuk Production)
+        // Memastikan notifikasi benar-benar dari Midtrans, bukan dari orang jahat.
+        // Formula resmi Midtrans: SHA512(order_id + status_code + gross_amount + ServerKey)
+        // ==========================================
+        const serverKey = (process.env.MIDTRANS_SERVER_KEY || '').trim();
+        if (!serverKey) {
+            console.error('❌ MIDTRANS_SERVER_KEY belum diset di Vercel!');
+            return res.status(500).json({ message: 'Server key not configured' });
+        }
+
+        const raw = order_id + status_code + gross_amount + serverKey;
+        const expectedSignature = crypto.createHash('sha512').update(raw).digest('hex');
+
+        if (signature_key !== expectedSignature) {
+            console.error(`❌ Signature TIDAK VALID untuk order ${order_id}. Request ditolak.`);
+            return res.status(403).json({ message: 'Invalid signature' });
+        }
+        // ==========================================
+        // SELESAI VERIFIKASI SIGNATURE
+        // ==========================================
 
         // Hanya proses jika pembayaran berhasil (settlement atau capture)
         const isSuccess = transaction_status === 'settlement' || (transaction_status === 'capture' && fraud_status === 'accept');
