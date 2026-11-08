@@ -1,9 +1,8 @@
-// PERBAIKAN: Paksa Node.js menggunakan IPv4 untuk menghindari masalah koneksi menggantung di Vercel
 import dns from 'node:dns';
 dns.setDefaultResultOrder('ipv4first');
 
 export default async function handler(req, res) {
-    // 1. IZINKAN AKSES (CORS) DI PALING ATAS
+    // 1. IZINKAN AKSES (CORS)
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -21,24 +20,29 @@ export default async function handler(req, res) {
     try {
         const { order_id, gross_amount, nama_pembeli, email_pembeli } = req.body;
 
-        const serverKey = process.env.MIDTRANS_SERVER_KEY ? process.env.MIDTRANS_SERVER_KEY.trim() : '';
+        // Pastikan Server Key terbaca dan bersih dari spasi
+        const serverKey = (process.env.MIDTRANS_SERVER_KEY || '').trim();
         
         if (!serverKey) {
+            console.error('❌ ERROR: MIDTRANS_SERVER_KEY tidak ditemukan di Vercel!');
             return res.status(500).json({ message: 'Server Key Midtrans belum diset di Vercel' });
         }
 
+        // Cek mode Production atau Sandbox
         const isProduction = process.env.MIDTRANS_IS_PRODUCTION === 'true';
+        
+        console.log(`[START] Meminta Token Midtrans (Mode: ${isProduction ? 'PRODUCTION (UANG ASLI)' : 'SANDBOX'})...`);
+        console.log(`[INFO] Order ID: ${order_id}, Nominal: ${gross_amount}`);
+
         const authString = Buffer.from(serverKey + ':').toString('base64');
         
         const midtransUrl = isProduction 
             ? 'https://app.midtrans.com/snap/v1/transactions' 
             : 'https://app.sandbox.midtrans.com/snap/v1/transactions';
 
-        console.log(`[START] Mengirim request ke Midtrans ${isProduction ? 'PRODUCTION' : 'SANDBOX'}...`);
-
-        // PERBAIKAN: Tambahkan AbortController untuk batas waktu (Timeout)
+        // Batas waktu 10 detik
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 8000); // Batas waktu 8 detik
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
 
         const response = await fetch(midtransUrl, {
             method: 'POST',
@@ -57,35 +61,27 @@ export default async function handler(req, res) {
                     email: email_pembeli || 'pelanggan@kebabidi.com'
                 }
             }),
-            signal: controller.signal // Masukkan signal timeout ke dalam fetch
+            signal: controller.signal
         });
 
-        clearTimeout(timeoutId); // Hentikan timer jika berhasil merespons sebelum 8 detik
+        clearTimeout(timeoutId);
 
         const data = await response.json();
-        console.log("[SUCCESS] Response dari Midtrans diterima.");
 
         if (data.token) {
+            console.log(`✅ [SUCCESS] Token berhasil didapatkan!`);
             res.status(200).json({ token: data.token });
         } else {
-            console.error("Midtrans Error Response:", data);
+            // JIKA GAGAL, TAMPILKAN PESAN ASLI DARI MIDTRANS DI LOG VERCEL
+            console.error("❌ GAGAL DAPAT TOKEN. Pesan dari Midtrans:", JSON.stringify(data));
             res.status(500).json({ message: 'Gagal dapat token', error: data });
         }
 
     } catch (error) {
-        console.error("=== FETCH GAGAL TOTAL ===");
-        console.error("Pesan Error:", error.message);
-        
-        // Cek apakah error disebabkan oleh Timeout
+        console.error("❌ SERVER ERROR:", error.message);
         if (error.name === 'AbortError') {
-            console.error("Penyebab: Request ke Midtrans memakan waktu lebih dari 8 detik (Timeout).");
             return res.status(504).json({ message: 'Koneksi ke Midtrans Timeout' });
         }
-
-        console.error("Penyebab (Cause):", error.cause); 
-        res.status(500).json({ 
-            message: 'Terjadi kesalahan server saat menghubungi Midtrans', 
-            detail: error.message 
-        });
+        res.status(500).json({ message: 'Kesalahan server', detail: error.message });
     }
 }
