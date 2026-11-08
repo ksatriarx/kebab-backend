@@ -14,14 +14,19 @@ export default async function handler(req, res) {
         const { order_id, transaction_status, fraud_status, status_code, gross_amount, signature_key } = data;
 
         // ==========================================
-        // BLOK DEBUGGING & VERIFIKASI SIGNATURE
+        // BYPASS KHUSUS TEST NOTIFICATION DARI MIDTRANS
+        // (Agar tombol Test Notification di dashboard jadi HIJAU)
         // ==========================================
-        // Pastikan Server Key terbaca dan bersih dari spasi/enter
+        if (String(order_id).toLowerCase().includes('test')) {
+            console.log("ℹ️ Menerima Test Notification dari Dashboard Midtrans. Lolos.");
+            return res.status(200).json({ message: 'Test Notification Success' });
+        }
+        // ==========================================
+
+        // ==========================================
+        // VERIFIKASI SIGNATURE (WAJIB UNTUK TRANSAKSI ASLI)
+        // ==========================================
         const serverKey = (process.env.MIDTRANS_SERVER_KEY || '').trim();
-        
-        console.log("========== MEMULAI WEBHOOK ==========");
-        console.log(`Order ID: ${order_id}`);
-        console.log(`Status: ${transaction_status}`);
         
         if (!serverKey) {
             console.error('❌ FATAL: MIDTRANS_SERVER_KEY kosong atau tidak terbaca di Vercel!');
@@ -37,27 +42,15 @@ export default async function handler(req, res) {
         const raw = strOrderId + strStatusCode + strGrossAmount + serverKey;
         const expectedSignature = crypto.createHash('sha512').update(raw).digest('hex');
 
-        // Log untuk melihat perbandingan
-        console.log(`Signature dari Midtrans : ${signature_key}`);
-        console.log(`Signature dari Vercel    : ${expectedSignature}`);
-
-        // Jika signature tidak cocok, tolak (403)
         if (signature_key !== expectedSignature) {
             console.error(`❌ TOLAK: Signature tidak cocok untuk order ${order_id}.`);
             return res.status(403).json({ message: 'Invalid signature' });
         }
         
         console.log(`✅ LOLOS: Signature valid!`);
-        console.log("=====================================");
         // ==========================================
         // SELESAI BLOK VERIFIKASI
         // ==========================================
-
-        // Cek apakah ini cuma Test Notification dari dashboard Midtrans
-        if (strOrderId.includes('test') || strOrderId.includes('TEST')) {
-            console.log("ℹ️ Ini adalah Test Notification dari Dashboard Midtrans. Sukses!");
-            return res.status(200).json({ message: 'Test Notification Success' });
-        }
 
         // Hanya proses jika pembayaran berhasil (settlement atau capture)
         const isSuccess = transaction_status === 'settlement' || (transaction_status === 'capture' && fraud_status === 'accept');
@@ -70,7 +63,7 @@ export default async function handler(req, res) {
         // ==========================================
         // SKENARIO 1: TOP UP SALDO (PREFIX TOPUP-)
         // ==========================================
-        if (order_id.startsWith('TOPUP-')) {
+        if (strOrderId.startsWith('TOPUP-')) {
             console.log("🚀 Memproses Top Up Saldo...");
             const email = data.customer_details.email;
             const emailKey = email.replace(/[^a-zA-Z0-9]/g, '');
@@ -106,7 +99,7 @@ export default async function handler(req, res) {
         // ==========================================
         // SKENARIO 2: SELF SERVICE QRIS (PREFIX SELF-)
         // ==========================================
-        else if (order_id.startsWith('SELF-')) {
+        else if (strOrderId.startsWith('SELF-')) {
             console.log("🚀 Memproses Pembayaran QRIS Self Service...");
             
             // Cari dokumen pesanan berdasarkan order_id
